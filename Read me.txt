@@ -1,0 +1,15 @@
+How to run the Dashboard using Live Server in VS Code
+
+1.File needs to be placed in the same folder (HTML file and CSV files).
+
+2.Open the project folder in Visual Studio Code.
+
+3.Install the free Live Server extension (Ritwick Dey) if it’s not already installed.
+
+4.In the Explorer pane, right-click html file and ‘Open with Live Server’. Live Server spins up a local web server and automatically opens 
+the dashboard in your default browser.
+
+5.All CSV data will be fetched, scripts, and interactive features will now run without additional setup.
+
+
+(If you prefer the command line, you can still run python -m http.server 8000 and visit http://localhost:8000/html file.)

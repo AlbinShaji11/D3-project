@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Substitution and Home Advantage Analysis Dashboard</title>
+
+    <!-- Swiper.js for Slideshow -->
+    <link rel="stylesheet" href="https://unpkg.com/swiper@8/swiper-bundle.min.css" />
+    <script src="https://unpkg.com/swiper@8/swiper-bundle.min.js"></script>
+
+    <!-- D3.js Libraries -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+
+    <!-- noUiSlider for Year Range Slider -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.7.1/nouislider.min.js"></script>
+
+    <style>
+        /* General Body and Slide Styles */
+        html, body {
+            height: 100%;
+            overflow: hidden; /* To Prevent scrolling*/
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; 
+            margin: 0; 
+            background: #f0f2f5; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .dashboard-container { 
+            position: relative; 
+            width: 100%; 
+            max-width: 1600px; 
+            height: 95vh; 
+            margin: 2.5vh auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .swiper { 
+            width: 100%; 
+            height: 100%; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+            border-radius: 8px; 
+            background: #fff; 
+        }
+        .swiper-slide { 
+            overflow: auto; 
+            padding: 25px; 
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Swiper navigation buttons */
+        .swiper-button-next, .swiper-button-prev {
+            color: red; 
+            font-size: 25px;
+        }
+        .swiper-pagination-bullet-active { background: #007aff; }
+
+        /* Titles and Controls */
+        h1 { margin: 0 0 10px 0; font-size: 1.8em; text-align: center; color: #333; }
+        h2 { margin-top: 5px; margin-bottom: 10px; font-size: 1.2em; text-align: center; color: #333;}
+        .controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 20px; margin-bottom: 1em; }
+        .controls label { font-weight: 600; color: #555; }
+        select { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
+        
+        svg { display: block; margin: 0 auto; background: #fafafa; border: 1px solid #ddd; border-radius: 4px; width: 100%; height: 100%; }
+
+        /* Generic Tooltip Style */
+        .tooltip {
+            position: absolute; padding: 10px; background: rgba(0,0,0,0.85);
+            color: #fff; border-radius: 6px; pointer-events: none;
+            font: 13px sans-serif; opacity: 0; transition: opacity 0.2s;
+            max-width: 300px; z-index: 1000; line-height: 1.4;
+        }
+
+        /* Help Button & Modal */
+        #help-button {
+            position: absolute; top: -15px; right: 0; z-index: 500;
+            background: #007aff; color: white; border: none;
+            border-radius: 20px; width: auto; padding: 0 15px; height: 40px;
+            font-size: 18px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 998;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #fff; padding: 25px; border-radius: 8px;
+            width: 90%; max-width: 500px; z-index: 999;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .modal-content h3 { margin-top: 0; }
+        .modal-content .close-button {
+            position: absolute; top: 10px; right: 15px;
+            font-size: 24px; font-weight: bold;
+            border: none; background: none; cursor: pointer;
+        }
+
+        /* --- Slide 1: Stacked and Sankey --- */
+        #slide1-content { display: flex; gap: 20px; align-items: stretch; flex-grow: 1; min-height: 0;}
+        #stacked-container, #sankey-container { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+        #stacked-svg, #sankey-svg { flex-grow: 1; min-height: 0; }
+        #season-slider { width: 300px; }
+        #season-range-label { font-weight: bold; font-size: 14px; color: #333; }
+        .common-legend { text-align:center; margin-bottom:15px; }
+        .common-legend .box { display:inline-block; width:14px; height:14px; margin-right:5px; vertical-align:middle; border: 1px solid rgba(0,0,0,0.2); }
+        .common-legend span { margin-right:1.5em; font-size: 14px; }
+        .axis-label { font-size: 14px; font-weight: bold; fill: #555; }
+        
+        /* Sankey Specific */
+        .node rect { shape-rendering: crispEdges; stroke: #000; }
+        .node text { pointer-events: none; font: 12px sans-serif; text-shadow: 0 1px 0 #fff; }
+        .link { fill: none; stroke-opacity: 0.5; pointer-events: all; transition: stroke-opacity 0.2s; }
+        .link:hover { stroke-opacity: 0.9; }
+        .link.faded { stroke-opacity: 0.05 !important; }
+        .link.highlighted { stroke-opacity: 0.9 !important; }
+        
+        .tooltip img.head { width:70px; height:70px; border-radius:50%; object-fit:cover; }
+        .tooltip img.arrow { width:35px; margin:0 6px; }
+        .tooltip .info { display:grid; grid-template-columns:1fr auto 1fr; gap: 2px 8px; margin-top:8px; font:12px sans-serif; align-items: center; }
+        .tooltip .info .label { font-weight:bold; text-align:center; }
+        .tooltip-breakdown { font-size: 12px; margin-top: 5px; }
+        .tooltip-breakdown div { display: flex; justify-content: space-between; }
+
+        .sankey-axis-label {
+            font-size: 14px;
+            font-weight: bold;
+            fill: #555;
+            text-anchor: middle;
+        }
+
+
+        /* Stacked Bar Specific */
+        .bar-label { font-size: 11px; text-anchor: middle; fill: #333; font-weight: 500; pointer-events: none; }
+        .stacked-bar-group { cursor: pointer; }
+        .stacked-bar-rect { transition: opacity 0.2s; }
+
+        /* --- Slide 2: Beeswarm --- */
+        #slide2-content { flex-grow: 1; display: flex; flex-direction: column; }
+        .legend { text-align: center; margin-bottom: 1em; } /* Centered legend */
+        .legend span { margin-right: 1em; }
+        .gridline { stroke:#ccc; stroke-dasharray:3,3; }
+        .bee-dot { stroke-width:1; cursor:pointer; transition: r 0.2s, stroke-width 0.2s, opacity 0.2s; }
+        .bee-dot:hover { stroke-width:2; r: 5px !important; }
+        #swarm-svg { cursor: grab; }
+        #swarm-svg:active { cursor: grabbing; }
+        .axis-label-swarm { font-size: 14px; font-weight: bold; fill: #555; }
+        #swarm-reset-button { padding: 5px 10px; border-radius: 5px; border: 1px solid #ccc; background: #eee; cursor: pointer; font-size: 12px; margin-left: 10px; }
+
+
+        /* --- Slide 3: Mirror Bars --- */
+        #slide3-content { flex-grow: 1; display: flex; flex-direction: column; }
+        .tabs { text-align:center; margin-bottom:12px; }
+        .tabs button { padding:8px 16px; margin:0 4px; border:1px solid #ccc; background:#fff; cursor:pointer; border-radius:4px; transition: all 0.2s; }
+        .tabs button.active { background:#007aff; color:#fff; border-color:#007aff; }
+        .legend { text-align: center; margin-bottom: 1em; }
+        .legend .box { display:inline-block; width:12px; height:12px; margin-right:4px; vertical-align:middle; }
+        .bar-home, .bar-away { opacity:0.9; }
+        .bar-group { transition: opacity 0.2s; cursor: pointer; }
+        .home-label, .away-label { font-weight:bold; font-size:12px; pointer-events: none; }
+        .home-label { fill:#31A354; }
+        .away-label { fill:#F03B20; }
+        .metric-label { font-size:12px; fill:#333; font-weight:bold; }
+        .season-label { font-size:14px; font-weight:bold; }
+        .axis-mirror line, .axis-mirror path { stroke:#888; }
+    </style>
+</head>
+<body>
+
+<div class="dashboard-container">
+    <h1>Substitution and Home Advantage Analysis Dashboard</h1>
+    <button id="help-button">Help</button>
+
+    <div class="swiper">
+        <div class="swiper-wrapper">
+            <!-- SLIDE 1: STACKED BAR and SANKEY -->
+            <div class="swiper-slide" id="slide1">
+                <div class="controls">
+                    <label for="common-team-filter">Team:</label>
+                    <select id="common-team-filter"></select>
+                    <label>Season Range:</label>
+                    <div id="season-slider"></div>
+                    <span id="season-range-label"></span>
+                </div>
+                <div class="common-legend" id="common-legend"></div>
+                <div id="slide1-content">
+                    <div id="stacked-container">
+                        <h2>Substitutions by Match State</h2>
+                        <svg id="stacked-svg"></svg>
+                    </div>
+                    <div id="sankey-container">
+                        <h2>Positional Substitution Flow</h2>
+                         <svg id="sankey-svg"></svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SLIDE 2: BEESWARM PLOT -->
+            <div class="swiper-slide" id="slide2">
+                <h2>Substitution Timings in Home vs. Away Matches</h2>
+                <div class="controls">
+                    <label>Team: <select id="swarm-team"></select></label>
+                    <label>Season: <select id="swarm-season"></select></label>
+                    <button id="swarm-reset-button">Reset View</button>
+                </div>
+                <div class="legend" id="swarm-legend">
+                    <span class="box" style="background:#4caf50;"></span> Home
+                    <span class="box" style="background:#f44336;"></span> Away
+                    <span class="box" style="background:#F0E442;"></span> Goal
+                    <span class="box" style="background:#004D40;"></span> Assist
+                </div>
+                <div id="slide2-content">
+                    <svg id="swarm-svg"></svg>
+                </div>
+            </div>
+
+            <!-- SLIDE 3: MIRROR BARS -->
+            <div class="swiper-slide" id="slide3">
+                 <h2>Home vs. Away Performance Metrics</h2>
+                <div class="controls">
+                    <label>Team: <select id="mirror-team"></select></label>
+                    <label>Season 1: <select id="mb-year1"></select></label>
+                    <label>Season 2: <select id="mb-year2"></select></label>
+                    <label>Season 3: <select id="mb-year3"></select></label>
+                </div>
+                <div class="tabs" id="tabs"></div>
+                <div class="legend" id="mirror-legend">
+                    <span><span class="box" style="background:#4caf50"></span>Home</span>
+                    <span><span class="box" style="background:#f44336"></span>Away</span>
+                </div>
+                 <div id="slide3-content">
+                    <svg id="mirror-svg"></svg>
+                </div>
+            </div>
+        </div>
+        <!-- Add Pagination and Navigation -->
+        <div class="swiper-pagination"></div>
+        <div class="swiper-button-next"></div>
+        <div class="swiper-button-prev"></div>
+    </div>
+    <div id="data-source-info" style="text-align: center; margin-top: 15px; font-size: 0.85em; color: #666;">
+        Data Source: 
+        <a href="https://fbref.com/en/comps/9/2023-2024/schedule/2023-2024-Premier-League-Scores-and-Fixtures" target="_blank" style="color: #007aff; text-decoration: none;">FBref (Premier League)</a>, 
+        <a href="https://www.kaggle.com/datasets/gokhanergul/football-match-statistics/data" target="_blank" style="color: #007aff; text-decoration: none;">Kaggle (Football Match Statistics)</a>
+    </div>
+</div>
+<!-- Tooltip -->
+<div id="tooltip" class="tooltip"></div>
+<!-- Help Modal -->
+<div id="modal-overlay" class="modal-overlay">
+    <div id="modal-content" class="modal-content">
+        <button id="modal-close-button" class="close-button">&times;</button>
+        <h3 id="modal-title"></h3>
+        <p id="modal-text"></p>
+    </div>
+</div>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+
+    // Main data
+    Promise.all([
+        d3.csv("Final_Substitution_Dataset.csv", d => {
+            d.minute = +d.minute;
+            d.season = d.season.trim();
+            d.home_team = d.home_team.trim();
+            d.away_team = d.away_team.trim();
+            d.sub_out_pos = d.sub_out_pos.trim();
+            d.sub_in_pos = d.sub_in_pos.trim();
+            d.scored = d.scored === 'TRUE'; // Convert to boolean
+            d.assisted = d.assisted === 'TRUE'; // Convert to boolean
+            return d;
+        }),
+        d3.csv("Final_Home_Analysis_Dataset.csv", r => {
+            Object.keys(r).forEach(k => {
+                if (k.endsWith("_Home") || k.endsWith("_Away")) {
+                    const raw = r[k].replace("%", "");
+                    r[k] = raw === "" ? NaN : +raw;
+                }
+            });
+            return r;
+        })
+    ]).then(([subsData, homeData]) => {
+        const tooltip = d3.select("#tooltip");
+
+
+        
+        // --- SHARED DATA and CONTROLS ---
+        const allTeams = ["All Teams", ...new Set(subsData.map(d => d.home_team))].sort();
+        const allSeasons = [...new Set(subsData.map(d => d.season))].sort();
+        const mirrorSeasons = [...new Set(homeData.map(d => d.season_year))].sort();
+        const positions = ["FW", "MF", "DF", "GK"];
+        
+        // Colorblind-friendly palette
+        const commonColors = { FW:"#4E79A7", MF:"#F28E2B", DF:"#97D8C4", GK:"#B07AA1" };
+        const goalColor = "#F0E442";
+        const assistColor = "#004D40";
+
+        // --- INITIALIZE SWIPER ---
+        const swiper = new Swiper('.swiper', {
+            navigation: { nextEl: '.swiper-button-next', prevEl: '.swiper-button-prev' },
+            pagination: { el: '.swiper-pagination', clickable: true },
+            allowTouchMove: false, 
+        });
+        
+        
+        // --- HELP MODAL LOGIC ---
+        const helpButton = document.getElementById('help-button');
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalCloseButton = document.getElementById('modal-close-button');
+        const modalTitle = document.getElementById('modal-title');
+        const modalText = document.getElementById('modal-text');
+
+        const helpTexts = [
+            { title: 'Slide 1: Substitutions and Positional Flow', text: 'This slide shows substitution patterns across different match states using Stacked Bar Graph and Sankey Diagram. The Stacked Bar graph shows the distribution of substitution by different positions that came in during the given match state.<ul><li> Use the <strong>Dropdowns</strong> and year <strong>Slider</strong> to select a team and seasons.</li><li> <strong>Hover</strong> a bar on the left to highlight flows in the Sankey Diagram.</li><li> <strong>Click</strong> the bar to filter the Sankey diagram by that game state and time. Hover a flow to see player details.</li><li> <strong>Click the background</strong> to reset the filter.</ul><br> <strong> Note:</strong> To see the Slide Interaction guide again click on the <strong>Help</strong> placed on the top right of the page. This applies to other slides as well. ' },
+            { title: 'Slide 2: Substitution Timings Across Home and Away Matches', text: 'This beeswarm plot shows when substitutions occur during Home and Away matches.<ul> <li> Use the <strong>Dropdowns</strong> to select a team and seasons.</li> <li>Dots in <strong>Yellow</strong> are for goals, and <strong>Dark Green</strong> for assists.</li> <li> <strong>Hover</strong> a dot for details.</li> <li> <strong>Click</strong> a dot to isolate that match substituion details.</li> <li> Use the <strong>Reset View</strong> button or <strong>double-click the background</strong> to clear the selection and zoom.</li></ul>' },
+            { title: 'Slide 3: Home and Away Performance Metrics', text: 'This chart compares team statistics at home vs. away across seasons.<ul> <li> Use the <strong>Dropdowns</strong> to select a team and seasons.</li> <li><strong>Click</strong> the tabs to explore different metric categories.</li> <li> <strong>Hover</strong> over a metric to highlight it across all visible seasons.</li></ul>' }
+        ];
+
+        function showHelpModal() {
+            const currentSlideIndex = swiper.activeIndex;
+            const help = helpTexts[currentSlideIndex];
+            modalTitle.textContent = help.title;
+            modalText.innerHTML = help.text;
+            modalOverlay.classList.add('active');
+        }
+        function hideHelpModal() { modalOverlay.classList.remove('active'); }
+        
+        helpButton.addEventListener('click', showHelpModal);
+        modalCloseButton.addEventListener('click', hideHelpModal);
+        modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) hideHelpModal(); });
+
+        if (!sessionStorage.getItem('visitedDashboard')) {
+            setTimeout(showHelpModal, 500);
+            sessionStorage.setItem('visitedDashboard', 'true');
+        }
+        
+        // --- GENERIC HELPER FUNCTIONS ---
+        function populateDropdown(selector, data, defaultSelection = null) {
+            const select = d3.select(selector);
+            select.selectAll("option").data(data).join("option").attr("value", d => d).text(d => d);
+            if (defaultSelection) select.property("value", defaultSelection);
+        }
+        const showTooltip = (e, content) => {
+            tooltip.html(content)
+                .style("opacity", 1);
+            positionTooltip(e); 
+        };
+        const moveTooltip = (e) => {
+            positionTooltip(e); 
+        };
+        const hideTooltip = () => tooltip.style("opacity", 0);
+
+        
+        function positionTooltip(e) {
+            const tooltipNode = tooltip.node();
+            const tooltipWidth = tooltipNode.offsetWidth;
+            const tooltipHeight = tooltipNode.offsetHeight;
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            let x = e.pageX + 15;
+            let y = e.pageY + 15;
+
+            
+            if (x + tooltipWidth > viewportWidth - 20) { 
+                x = viewportWidth - tooltipWidth - 20;
+            }
+            if (x < 10) { 
+                x = 10;
+            }
+            if (y + tooltipHeight > viewportHeight - 20) {
+                y = viewportHeight - tooltipHeight - 20;
+            }
+            if (y < 10) {
+                y = 10;
+            }
+            tooltip.style("left", x + "px")
+                   .style("top", y + "px");
+        }
+
+        // --- SLIDE 1: STACKED BAR and SANKEY ---
+        let lockedState = null;
+        let slide1FilteredData = [];
+        const seasonSlider = document.getElementById('season-slider');
+        const rangeLabel = d3.select("#season-range-label");
+        
+        noUiSlider.create(seasonSlider, { start: [0, allSeasons.length - 1], connect: true, step: 1, range: { 'min': 0, 'max': allSeasons.length - 1 }, format: { to: i => allSeasons[Math.round(i)], from: v => allSeasons.indexOf(v) } });
+        seasonSlider.noUiSlider.set(["2018-2019", "2020-2021"]);
+
+        d3.select("#common-legend").selectAll("span").data(positions).join("span").html(k => `<span class="box" style="background:${commonColors[k]}"></span>${k}`);
+
+        function updateSlide1Data() {
+            const teamSel = d3.select("#common-team-filter").property("value");
+            const [s0, s1] = seasonSlider.noUiSlider.get();
+            rangeLabel.text(`${s0} — ${s1}`);
+
+            slide1FilteredData = subsData.filter(d => {
+                const seasonIndex = allSeasons.indexOf(d.season);
+                return seasonIndex >= allSeasons.indexOf(s0) && seasonIndex <= allSeasons.indexOf(s1) && (teamSel === "All Teams" || d.home_team === teamSel || d.away_team === teamSel);
+            });
+            drawSlide1();
+        }
+
+        function drawSlide1() {
+            drawStacked(slide1FilteredData);
+            
+            let sankeyData = slide1FilteredData;
+            if (lockedState) {
+                sankeyData = slide1FilteredData.filter(d => d.match_state === lockedState.match_state && d.sub_cluster === lockedState.sub_cluster);
+            }
+            drawSankey(sankeyData);
+        }
+
+        function drawSankey(data) {
+            const svg = d3.select("#sankey-svg").html("");
+            const { width, height } = svg.node().getBoundingClientRect();
+            if (width <= 0 || height <= 0) return;
+            
+            const sk = d3.sankey().nodeId(d => d.id).nodeWidth(25).nodePadding(10).extent([[1, 1], [width - 1, height - 25]]);
+            let nodes = positions.flatMap(p => [{ id: `${p}_out`, name: p, layer:"out" }, { id: `${p}_in`, name: p, layer:"in" }]);
+            
+            
+            const links = data.filter(d => positions.includes(d.sub_out_pos) && positions.includes(d.sub_in_pos)).map(d => ({
+                source: `${d.sub_out_pos}_out`,
+                target: `${d.sub_in_pos}_in`,
+                value: 1, // Each link represents one substitution
+                color: commonColors[d.sub_out_pos],
+                detail: d 
+            }));
+
+            if (links.length === 0) {
+                 svg.append("text").attr("x", width/2).attr("y", height/2).attr("text-anchor", "middle").text("No data for this selection.");
+                 return;
+            }
+
+            const g = svg.append("g").attr("transform", "translate(0,15)");
+            const {nodes: graphNodes, links: graphLinks} = sk({nodes: JSON.parse(JSON.stringify(nodes)), links: JSON.parse(JSON.stringify(links))});
+            
+            g.append("g").selectAll("path").data(graphLinks).join("path")
+                .attr("class", d => `link sub-time-${d.detail.sub_cluster.replace(/[^\w]/g,'')} sub-state-${d.detail.match_state}`)
+                .attr("d", d3.sankeyLinkHorizontal())
+                .attr("stroke", d => d.color)
+                .attr("stroke-width", d => Math.max(1, d.width))
+                .on("mouseover", (e, d) => {
+                     const deet = d.detail; // Use the individual sub detail for tooltip
+                     showTooltip(e, `
+                       <div style="text-align:center;">
+                         <img class="head" src="${deet.sub_out_headshot}" " style="border:3px solid red;"/>
+                         <img class="arrow" src="Sub_icon.png" style="transform: rotate(180deg);"/>
+                         <img class="head" src="${deet.sub_in_headshot}" " style="border:3px solid green;"/>
+                       </div>
+                       <div style="text-align:center; font-size:11px; margin-top:5px;">Time: ${deet.minute}'</div>
+                       <div class="info">
+                           <div>${deet.sub_out}</div><div class="label">Name</div><div style="text-align:right;">${deet.sub_in}</div>
+                           <div>${deet.sub_out_pos}</div><div class="label">Position</div><div style="text-align:right;">${deet.sub_in_pos}</div>
+                           <div>${deet.sub_out_age}</div><div class="label">Age</div><div style="text-align:right;">${deet.sub_in_age}</div>
+                           <div>${deet.sub_out_nationality}</div><div class="label">Nationality</div><div style="text-align:right;">${deet.sub_in_nationality}</div>
+                       </div>
+                       `);
+                })
+                .on("mousemove", moveTooltip)
+                .on("mouseout", hideTooltip);
+            
+            const nodeG = g.append("g").selectAll("g").data(graphNodes).join("g").attr("class", "node");
+            nodeG.append("rect").attr("x", d=>d.x0).attr("y", d=>d.y0).attr("width", d=>d.x1-d.x0).attr("height", d=>d.y1-d.y0).attr("fill", d=>commonColors[d.name] || "#999");
+            nodeG.append("text").attr("x", d=>d.layer==="out"?d.x0-6:d.x1+6).attr("y", d=>(d.y0+d.y1)/2).attr("dy", "0.35em").attr("text-anchor", d=>d.layer==="out"?"end":"start").text(d=>`${d.name}`);
+
+            // Add "Sub out" label on the left
+            svg.append("text")
+                .attr("class", "sankey-axis-label")
+                .attr("x", sk.nodeWidth() / 2 + 15) 
+                .attr("y", 12) 
+                .attr("text-anchor", "start")
+                .text("Sub Out");
+
+            // Add "Sub in" label on the right
+            svg.append("text")
+                .attr("class", "sankey-axis-label")
+                .attr("x", width - sk.nodeWidth() / 2 - 15) 
+                .attr("y", 12)
+                .attr("text-anchor", "end")
+                .text("Sub In");
+        }
+
+        function drawStacked(data) {
+            const svg = d3.select("#stacked-svg").html("");
+            svg.on('click', () => { if(lockedState) { lockedState = null; drawSlide1(); } });
+
+            const { width, height } = svg.node().getBoundingClientRect();
+            if (width <= 0 || height <= 0) return;
+            
+            const margin = {top: 40, right: 20, bottom: 60, left: 60};
+            const stW = width - margin.left - margin.right;
+            const stH = height - margin.top - margin.bottom;
+            const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+            const rollup = d3.rollup(data, v => v.length, d => d.match_state, d => d.sub_cluster, d => d.sub_in_pos);
+            const states = ["draw", "leading", "losing"], clusters = ["0-45", "45-60", "60-70", "70-80", "80-90", "90+"];
+
+            let chartData = states.flatMap(st => clusters.map(cl => {
+                const m = rollup.get(st)?.get(cl) || new Map();
+                let entry = { match_state: st, sub_cluster: cl};
+                positions.forEach(pos => entry[pos] = m.get(pos) || 0);
+                entry.total = d3.sum(positions, pos => entry[pos]);
+                return entry;
+            }));
+            
+            const y = d3.scaleLinear().domain([0, d3.max(chartData, d => d.total)]).nice().range([stH, 0]);
+            const stackGen = d3.stack().keys(positions);
+            
+            const stateWidth = stW / states.length;
+            states.forEach((st, i) => {
+                const panel = g.append("g").attr("transform", `translate(${i * stateWidth},0)`);
+                const x0 = d3.scaleBand().domain(clusters).range([0, stateWidth - 20]).padding(0.2);
+                
+                const panelData = chartData.filter(d => d.match_state === st);
+                
+                const barGroups = panel.selectAll(".stacked-bar-group").data(panelData).join("g")
+                    .attr("class", "stacked-bar-group")
+                    .attr("transform", d => `translate(${x0(d.sub_cluster)}, 0)`)
+                    .style("opacity", d => !lockedState ? 1 : (lockedState.match_state === d.match_state && lockedState.sub_cluster === d.sub_cluster) ? 1 : 0.3)
+                    .on("click", function(e, d) {
+                        e.stopPropagation();
+                        lockedState = (lockedState && lockedState.sub_cluster === d.sub_cluster && lockedState.match_state === d.match_state) ? null : { ...d };
+                        drawSlide1();
+                    })
+                    .on("mouseover", function(e, d) {
+                        let breakdownHtml = positions.map(pos => `<div><span>${pos}:</span><span>${d[pos]}</span></div>`).join('');
+                        showTooltip(e, `<b>${d.sub_cluster}' (${d.match_state})</b><br>Total Subs: ${d.total}<hr style="border-color: #555; margin: 4px 0;"> <div class="tooltip-breakdown">${breakdownHtml}</div>`);
+                        if (!lockedState) {
+                           d3.selectAll("#sankey-svg .link").classed("faded", true);
+                           d3.selectAll(`#sankey-svg .link.sub-time-${d.sub_cluster.replace(/[^\w]/g,'')}.sub-state-${d.match_state}`).classed("faded", false).classed('highlighted', true);
+                        }
+                    })
+                    .on("mousemove", moveTooltip)
+                    .on("mouseout", function() {
+                         hideTooltip();
+                         if (!lockedState) {
+                           d3.selectAll("#sankey-svg .link").classed("faded", false).classed('highlighted', false);
+                         }
+                    });
+
+                const series = stackGen(panelData);
+                barGroups.selectAll("rect").data(d => series.map(layer => ({ key: layer.key, data: layer.find(s => s.data.sub_cluster === d.sub_cluster) })) )
+                    .join("rect")
+                    .attr("class", "stacked-bar-rect")
+                    .attr("fill", d => commonColors[d.key])
+                    .attr("y", d => y(d.data[1]))
+                    .attr("height", d => y(d.data[0]) - y(d.data[1]))
+                    .attr("width", x0.bandwidth());
+                
+                barGroups.each(function(d) {
+                    if (d.total > 0) d3.select(this).append("text").attr("class", "bar-label").attr("x", x0.bandwidth() / 2).attr("y", y(d.total) - 5).text(d.total);
+                });
+
+                panel.append("g").attr("transform", `translate(0,${stH})`).call(d3.axisBottom(x0));
+                panel.append("text").attr("x", (stateWidth - 20) / 2).attr("y", -15).attr("text-anchor", "middle").style("font-weight", "bold").text(st.charAt(0).toUpperCase() + st.slice(1));
+                if (i === 0) panel.append("g").call(d3.axisLeft(y).ticks(5));
+            });
+
+            svg.append("text").attr("class", "axis-label").attr("transform", "rotate(-90)").attr("y", 0).attr("x", -(margin.top + stH / 2)).attr("dy", "1em").style("text-anchor", "middle").text("No of Substitutions");
+            svg.append("text").attr("class", "axis-label").attr("y", height - 5).attr("x", margin.left + stW/2).style("text-anchor", "middle").text("Substitution Timing Cluster");
+        }
+
+        // --- SLIDE 2: BEESWARM PLOT ---
+        const svgSwarm = d3.select("#swarm-svg");
+        let lockedMatch = null;
+        let zoom;
+
+        function drawSwarm() {
+            svgSwarm.html(""); 
+            const { width, height } = svgSwarm.node().getBoundingClientRect();
+            if (width <= 0 || height <= 0) return;
+            
+            const marginSwarm = {top: 20, right: 40, bottom: 60, left: 60};
+            const bsW = width - marginSwarm.left - marginSwarm.right;
+            const bsH = height - marginSwarm.top - marginSwarm.bottom;
+            
+            const gContainer = svgSwarm.append("g");
+            const gSwarm = gContainer.append("g").attr("transform", `translate(${marginSwarm.left},${marginSwarm.top})`);
+            
+            const xSwarm = d3.scaleLinear().domain([0, 120]).range([0, bsW]);
+            
+            const teamSel = d3.select("#swarm-team").property("value");
+            const seasonSel = d3.select("#swarm-season").property("value");
+            const pts = subsData.filter(d => d.season === seasonSel && (teamSel === "All Teams" || d.home_team === teamSel || d.away_team === teamSel))
+                .map(d => ({ ...d, x0: xSwarm(d.minute), y0: d.side === "home" ? bsH * 0.25 : bsH * 0.75 }));
+
+            const sim = d3.forceSimulation(pts)
+                .force("x", d3.forceX(d => d.x0).strength(0.8))
+                .force("y", d3.forceY(d => d.y0).strength(1))
+                .force("collide", d3.forceCollide(4.5))
+                .stop();
+            for (let i = 0; i < 120; i++) sim.tick();
+
+            const xAxisG = gContainer.append("g").attr("transform", `translate(${marginSwarm.left},${bsH + marginSwarm.top})`);
+            xAxisG.call(d3.axisBottom(xSwarm).ticks(12).tickFormat(d => d + "′"));
+            xAxisG.append("text").attr("class", "axis-label-swarm").attr("x", bsW/2).attr("y", 40).attr("fill", "black").text("Substitution Time");
+            
+            gSwarm.append("g").attr("class", "grid-lines").selectAll(".gridline").data(xSwarm.ticks(12)).join("line")
+              .attr("class", "gridline").attr("x1", d => xSwarm(d)).attr("x2", d => xSwarm(d)).attr("y1", 0).attr("y2", bsH);
+              
+            gSwarm.append("text").attr("class", "axis-label-swarm").attr("x", -10).attr("y", bsH * 0.25).attr("text-anchor", "end").text("Home");
+            gSwarm.append("text").attr("class", "axis-label-swarm").attr("x", -10).attr("y", bsH * 0.75).attr("text-anchor", "end").text("Away");
+
+            gSwarm.selectAll("circle").data(pts, d => d.match_id + d.sub_in + d.minute)
+                .join(
+                    enter => enter.append("circle")
+                        .attr("class", "bee-dot")
+                        .attr("cx", d => xSwarm(d.minute))
+                        .attr("cy", d => d.y0)
+                        .attr("r", 0),
+                    update => update,
+                    exit => exit.transition().duration(500).attr("r", 0).remove()
+                )
+                .attr("fill", d => {
+                    if (d.scored) return goalColor;
+                    if (d.assisted) return assistColor;
+                    return d.side === 'home' ? '#4caf50' : '#f44336';
+                })
+                .attr("stroke", d => {
+                    if (d.scored) return d3.color(goalColor).darker(1);
+                    if (d.assisted) return d3.color(assistColor).darker(1);
+                    return d.side === 'home' ? '#2e7d32' : '#c62828';
+                })
+                .attr("opacity", d => lockedMatch !== null ? (d.match_id === lockedMatch ? 1 : 0.1) : 0.9)
+                .on("mouseover", (e, d) => {
+                    if (!lockedMatch) gSwarm.selectAll(".bee-dot").attr("opacity", 0.1).filter(dd => dd.match_id === d.match_id).attr("opacity", 1).attr("r", 5);
+                    let tooltipText = `<strong>Match:</strong> ${d.home_team} vs ${d.away_team}<br/><strong>Time:</strong> ${d.minute}'<br/><strong>Sub In:</strong> ${d.sub_in}<br/><strong>Sub Out:</strong> ${d.sub_out}`;
+                    if(d.scored) tooltipText += `<br/><strong style="color:${goalColor};">Contribution: Goal</strong>`;
+                    if(d.assisted) tooltipText += `<br/><strong style="color:#F0E442 ;">Contribution: Assist</strong>`;
+                    showTooltip(e, tooltipText);
+                })
+                .on("mousemove", moveTooltip)
+                .on("mouseout", () => {
+                    if (!lockedMatch) gSwarm.selectAll(".bee-dot").attr("opacity", 0.9).attr("r", 4);
+                    hideTooltip();
+                })
+                .on("click", (e, d) => {
+                    e.stopPropagation();
+                    lockedMatch = lockedMatch === d.match_id ? null : d.match_id;
+                    gSwarm.selectAll(".bee-dot")
+                        .transition().duration(300)
+                        .attr("opacity", dd => lockedMatch !== null ? (dd.match_id === lockedMatch ? 1 : 0.1) : 0.9)
+                        .attr("r", dd => lockedMatch === dd.match_id ? 6 : 4);
+                })
+                .transition().duration(750).delay((d,i) => i * 0.5)
+                .attr("r", d => lockedMatch === d.match_id ? 6 : 4)
+                .attr("cx", d => d.x).attr("cy", d => d.y);
+            
+            zoom = d3.zoom().scaleExtent([1, 8]).on("zoom", (e) => gContainer.attr("transform", e.transform));
+            svgSwarm.call(zoom).on("dblclick.zoom", () => { 
+                svgSwarm.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
+            });
+        }
+        
+        d3.select("#swarm-reset-button").on("click", () => {
+             lockedMatch = null;
+             svgSwarm.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
+             drawSwarm();
+        });
+
+
+        // --- SLIDE 3: MIRROR BAR PLOTS ---
+        const categories = {
+            "Build-Up/Possession": ["Total_Passes", "Ball_Possession", "Dangerous_Attacks", "Corner Kicks"],
+            "Shooting/Goal Creation": ["Goal Attempts", "Shots on Goal", "Shots off Goal", "Free Kicks"],
+            "Defense/Discipline": ["Tackles", "Fouls", "Yellow_Cards", "Red_Cards"]
+        };
+        let activeCat = Object.keys(categories)[1]; // Default to shooting
+
+        Object.keys(categories).forEach((cat, i) => {
+            d3.select("#tabs").append("button").text(cat).classed("active", cat === activeCat).on("click", function() {
+                d3.selectAll("#tabs button").classed("active", false);
+                d3.select(this).classed("active", true);
+                activeCat = cat; drawBars();
+            });
+        });
+
+        function drawBars() {
+            const svg = d3.select("#mirror-svg").html("");
+            const { width, height } = svg.node().getBoundingClientRect();
+            if (width <= 0 || height <= 0) return;
+
+            const margin = {top: 20, right: 30, bottom: 60, left: 140 };
+            const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+            const W = width - margin.left - margin.right;
+            const H = height - margin.top - margin.bottom;
+
+            const teamSel = d3.select("#mirror-team").property("value");
+            const selY = ["#mb-year1", "#mb-year2", "#mb-year3"].map(id => d3.select(id).property("value"));
+            const metrics = categories[activeCat];
+
+            const panelsData = selY.map(season => ({
+                season,
+                vals: metrics.map(m => {
+                    const dataKey = m.replace(/ /g, "_");
+                    const rows = homeData.filter(d => d.season_year === season && (teamSel === "All Teams" || d.home_team === teamSel));
+                    return { 
+                        name: m, 
+                        home: d3.mean(rows, d => d[dataKey + "_Home"]) || 0, 
+                        away: d3.mean(rows, d => d[dataKey + "_Away"]) || 0 
+                    };
+                })
+            }));
+
+            const panelCount = panelsData.length, spacing = 40, panelW = (W - spacing * (panelCount - 1)) / panelCount;
+            const maxV = d3.max(panelsData.flatMap(p => p.vals.flatMap(d => [d.home, d.away]))) || 10;
+            const xScale = d3.scaleLinear().domain([0, maxV]).range([0, panelW / 2 - 25]).nice();
+            const yScale = d3.scaleBand().domain(metrics).range([0, H]).padding(0.1);
+
+            const panels = g.selectAll("g.panel").data(panelsData).join("g").attr("class", "panel").attr("transform", (p, i) => `translate(${i * (panelW + spacing)},0)`);
+            
+            panels.each(function(p, i) {
+                const panelG = d3.select(this);
+                const cx = panelW / 2;
+
+                const bars = panelG.selectAll("g.bar-group").data(p.vals).join("g").attr("class", "bar-group").attr("transform", d => `translate(0, ${yScale(d.name)})`);
+                bars.on("mouseover", function(e, d) {
+                    d3.selectAll("g.bar-group").style("opacity", 0.2);
+                    d3.selectAll("g.bar-group").filter(dd => dd.name === d.name).style("opacity", 1);
+                }).on("mouseout", () => d3.selectAll("g.bar-group").style("opacity", 1));
+                
+                bars.append("rect").attr("class", "bar-away").attr("fill", "#f44336").attr("height", yScale.bandwidth()).attr("x", d => cx - xScale(d.away)).attr("width", d => xScale(d.away));
+                bars.append("rect").attr("class", "bar-home").attr("fill", "#4caf50").attr("x", cx).attr("height", yScale.bandwidth()).attr("width", d => xScale(d.home));
+                bars.append("text").attr("class", "away-label").attr("x", d => cx - xScale(d.away) - 5).attr("y", yScale.bandwidth() / 2).attr("dy", "0.35em").attr("text-anchor", "end").text(d => d.away.toFixed(1));
+                bars.append("text").attr("class", "home-label").attr("x", d => cx + xScale(d.home) + 5).attr("y", yScale.bandwidth() / 2).attr("dy", "0.35em").attr("text-anchor", "start").text(d => d.home.toFixed(1));
+
+                if (i === 0) {
+                    panelG.selectAll(".metric-label").data(p.vals).join("text").attr("class", "metric-label")
+                        .attr("x", -15).attr("y", d => yScale(d.name) + yScale.bandwidth() / 2).attr("dy", "0.35em")
+                        .attr("text-anchor", "end").text(d => d.name);
+                }
+                const axisScale = d3.scaleLinear().domain([-maxV, maxV]).range([cx - xScale(maxV), cx + xScale(maxV)]);
+                panelG.append("g").attr("class", "axis-mirror").attr("transform", `translate(0,${H})`).call(d3.axisBottom(axisScale).ticks(5).tickFormat(d => Math.abs(d)));
+                panelG.append("text").attr("class", "season-label").attr("x", cx).attr("y", H + 40).attr("text-anchor", "middle").text(p.season);
+            });
+        }
+        
+        // --- INITIAL POPULATION & EVENT LISTENERS ---
+        populateDropdown("#common-team-filter", allTeams, "Arsenal");
+        populateDropdown("#swarm-team", allTeams, "Arsenal");
+        populateDropdown("#swarm-season", allSeasons.filter(s => s !== "All").reverse(), allSeasons.at(-1));
+        populateDropdown("#mirror-team", ["All Teams", ...new Set(homeData.map(d => d.home_team))].sort(), "Arsenal");
+        populateDropdown("#mb-year1", mirrorSeasons.slice().reverse(), mirrorSeasons.at(-1));
+        populateDropdown("#mb-year2", mirrorSeasons.slice().reverse(), mirrorSeasons.at(-2));
+        populateDropdown("#mb-year3", mirrorSeasons.slice().reverse(), mirrorSeasons.at(-3));
+        
+        d3.select("#common-team-filter").on("change", updateSlide1Data);
+        seasonSlider.noUiSlider.on('set', updateSlide1Data);
+        d3.selectAll("#swarm-team, #swarm-season").on("change", drawSwarm);
+        d3.selectAll("#mirror-team, #mb-year1, #mb-year2, #mb-year3").on("change", drawBars);
+        
+        function drawAllSlides() {
+            updateSlide1Data();
+            drawSwarm();
+            drawBars();
+        }
+        
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(drawAllSlides, 150);
+        });
+        
+        drawAllSlides(); // Initial draw
+
+    }).catch(err => {
+        console.error("Error loading data:", err);
+        document.body.innerHTML = `<h1 style='color: red; text-align: center; margin-top: 50px;'>Error: Could not load data files.<br/>Please check the browser console (F12) for more details. Open the file with VS Code, from VS code open the file with Live Server Extension.</h1>`;
+    });
+});
+</script>
+
+</body>
+</html>
